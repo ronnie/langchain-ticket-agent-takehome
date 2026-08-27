@@ -2,6 +2,7 @@
 
 Live log of every setup/build/eval step, kept for the walkthrough call.
 Each item: what we did, the exact command or UI path (with URL), and notes on what happened.
+Appended to continuously as steps are completed — this file is the source for the walkthrough narration.
 
 ## Phase 0 — Environment Setup
 
@@ -26,6 +27,12 @@ Each item: what we did, the exact command or UI path (with URL), and notes on wh
   pip freeze | grep -iE "^(langgraph|langsmith|langchain|anthropic|python-dotenv)" > requirements.txt
   ```
 - [x] Created `.env.example` (template for API keys) and `.gitignore` (excludes `venv/`, `.env`).
+- [x] Initialized a local git repo and committed scaffolding (`.gitignore`, `.env.example`, `requirements.txt`, this file). Not pushed anywhere yet — will ask before creating/pushing to a remote.
+  ```bash
+  git init
+  git add .gitignore .env.example requirements.txt ronnie-steps.txt
+  git commit -m "Initial project scaffolding"
+  ```
 - [ ] **Your action:** copy the template and fill in your real keys (never shared with Claude/committed to git):
   ```bash
   cd ~/langchain-takehome
@@ -35,13 +42,51 @@ Each item: what we did, the exact command or UI path (with URL), and notes on wh
   Fill in:
   - `ANTHROPIC_API_KEY` — from https://console.anthropic.com/settings/keys
   - `LANGSMITH_API_KEY` — from https://smith.langchain.com/settings (API Keys tab)
-- [ ] Smoke test: confirm both keys work and a trace lands in LangSmith.
+- [x] Wrote `smoke_test.py` — loads `.env`, checks both keys are present, makes one trivial `ChatAnthropic` call, prints the LangSmith project/tracing config.
+- [ ] Ran smoke test — **failed**: keys are valid/loaded correctly, but the Anthropic API call returned `400 invalid_request_error: Your credit balance is too low to access the Anthropic API`.
+  ```bash
+  source venv/bin/activate
+  python3 smoke_test.py
+  ```
+  Note for walkthrough: a Claude Pro subscription (claude.ai) is separate from Anthropic API billing (console.anthropic.com) — API calls need credits purchased there even with an active Pro plan. Waiting on credits to be added before retrying.
+- [x] Re-ran smoke test after adding API credits — **passed**. Model replied "Hello", tracing enabled, project = `ronnie-ticket-agent-takehome`.
+  ```bash
+  source venv/bin/activate
+  python3 smoke_test.py
+  ```
+- [x] Verified traces landed in the LangSmith UI.
+  UI path: https://smith.langchain.com → **Tracing** → project **`ronnie-ticket-agent-takehome`**
+  Saw both smoke-test runs listed: the failed attempt (`BadRequestError`, $0.00, before credits were added) and the successful one (`ai: Hello`, 18 tokens, $0.000034, 0.94s latency). Confirms tracing is wired correctly end to end before writing any real agent code.
+  (Used the in-app Browser at first — wasn't logged into the account there; switched to Claude in Chrome, which had an active logged-in session, to actually view it.)
+  Cross-checked independently: Ronnie also pulled up the same project URL in his own browser and confirmed the identical two traces — good corroborating evidence for the walkthrough.
+  Screenshot saved to repo: `evidence/langsmith-smoke-test-traces.png` (copied from `~/Screenshots/`; hit a filename gotcha — macOS screenshot names use a narrow no-break space (U+202F) before "PM", not a regular space, so a plain shell `cp` with a normal space couldn't find the file until resolved via Python's `os.listdir`).
 
 ## Phase 1 — Build the LangGraph Agent
-_(pending)_
+
+- [x] Designed the graph: `classify_ticket` -> conditional route to `billing_node` / `technical_node` / `general_node` -> `draft_response` -> `critique_response` -> (loop back to `draft_response` via `increment_retry`, up to 2 retries, if critique fails) -> `confidence_gate` -> conditional route to `auto_send` / `escalate_to_human`.
+- [x] Wrote `tools.py` — two small mock lookups (`lookup_billing_policy`, `search_kb`) that specialist nodes call, so responses are grounded in something concrete instead of the raw ticket alone.
+- [x] Wrote `graph.py` — full `StateGraph` implementation: `TicketState` TypedDict, all nodes, both conditional edges (route-by-category and route-after-critique, plus route-after-gate), compiled app, and a `run_ticket()` helper for manual testing. Uses `claude-haiku-4-5-20251001` for every LLM node (cheap/fast, sufficient for this exercise).
+  Escalation rule (deterministic, not LLM-judged): escalate if retries are exhausted and critique still fails, OR if it's a billing ticket whose draft mentions a refund (policy-sensitive, needs human sign-off per the mock billing policy).
+- [x] Manually ran the full graph on 4 sample tickets to sanity-check every branch:
+  ```bash
+  python3 graph.py   # billing/refund ticket -> correctly escalated
+  python3 -c "from graph import run_ticket; ..."   # login (technical), dark mode (general), crash w/ error code (technical)
+  ```
+  All 4 classified correctly and produced sensible drafts; all passed critique on the first attempt (retry_count stayed 0), so the loop itself wasn't exercised by these easy cases.
+- [x] Targeted test of `critique_response` in isolation with a deliberately policy-violating draft ("I'll refund your $500 immediately, no approval needed") — correctly returned `critique_passed: False` with specific feedback ("violates specialist notes... requires manager review for refunds over $100"). Confirms the retry-loop logic is sound; the eval dataset (Phase 2) should include a few tickets tricky enough to trigger it end-to-end for real.
 
 ## Phase 2 — Build the Dataset
-_(pending)_
+
+- [x] Wrote `dataset.py` — 13 synthetic support tickets (5 billing, 5 technical, 2 general, 1 security-flavored edge case) with reference labels (`expected_category`, `expected_escalate`). Deliberately included two edge cases rather than only easy wins:
+  - A ticket with no KB match ("garbled fonts" export issue) — tests behavior on a genuine knowledge-base miss.
+  - An account-hacked/fraud ticket with no literal "refund" mention — the current escalation rule (billing + "refund" keyword) likely won't catch this even though it probably should escalate. Included on purpose to see if the eval surfaces the gap.
+- [x] Created the dataset in LangSmith via the **SDK** (`client.create_dataset` + `client.create_examples`), idempotent — reruns skip creation if it already exists.
+  ```bash
+  source venv/bin/activate
+  python3 dataset.py
+  ```
+  Output: `Created dataset 'support-ticket-triage-eval' with 13 examples.`
+  UI path to view it: https://smith.langchain.com → **Datasets & Experiments** → `support-ticket-triage-eval`
 
 ## Phase 3 — Evaluators
 _(pending)_
@@ -56,4 +101,5 @@ _(pending)_
 _(pending)_
 
 ## Phase 7 — Friction Log
-_(pending)_
+See `FRICTION-LOG.md` (created and updated live as issues come up).
+- [x] Entry #1 logged: funded LLM provider API access is a silent prerequisite — a Claude Pro subscription doesn't cover API billing, and neither the take-home prompt nor the linked docs flag this. Caused the first agent call to fail with an unclear-to-newcomers 400 error.
