@@ -89,13 +89,45 @@ Appended to continuously as steps are completed — this file is the source for 
   UI path to view it: https://smith.langchain.com → **Datasets & Experiments** → `support-ticket-triage-eval`
 
 ## Phase 3 — Evaluators
-_(pending)_
+
+- [x] Wrote `evaluators.py` — 4 evaluators matching what the take-home calls out (correctness, helpfulness) plus one operational metric:
+  - `category_correct` — exact-match vs. `expected_category`
+  - `escalate_correct` — exact-match vs. `expected_escalate`
+  - `response_quality` — LLM-as-judge (Claude Haiku), 1-5 helpfulness/professionalism score
+  - `retry_count_metric` — not correctness, just logs how many times the draft->critique loop fired per example
 
 ## Phase 4 — Run Evaluation (SDK)
-_(pending)_
+
+- [x] Wrote `run_eval_sdk.py` — wraps `run_ticket()` as the `target` function, calls `langsmith.evaluate()` against the `support-ticket-triage-eval` dataset with all 4 evaluators.
+  ```bash
+  source venv/bin/activate
+  python3 run_eval_sdk.py
+  ```
+  Experiment: `ticket-agent-sdk-b84b88ac`
+  Results URL: https://smith.langchain.com/o/56b01680-1dc0-4312-9b3a-27f81896b348/datasets/e1d3348d-8463-47e8-9ff0-6c4f846971a2/compare?selectedSessions=188462e4-e677-4441-b917-4dce805a4a9e
+- [x] Reviewed results in the LangSmith UI. (Note: couldn't auto-save this screenshot to the repo the way the first one worked — Claude in Chrome's `save_to_disk` path isn't reachable from the project shell. Grab a live screenshot of the compare view above during the walkthrough call instead, or paste one in like before and I'll place it in `evidence/`.)
+  **Aggregate scores (13 examples):** category_correct 0.88 avg (11/13) · escalate_correct 1.00 avg (13/13) · response_quality 4.25/5 avg · retry_count 0.00 avg · total cost $0.0113.
+  **Key finding — row 3, the intentional edge case** ("I think my account was hacked — there are purchases I never made"): I'd labeled this `expected_category: technical`, expecting the agent's billing-only escalation rule to miss it (no literal "refund" keyword in the ticket). What actually happened: the agent classified it as **billing** (arguably reasonable — it's about unauthorized charges), drafted a reply that itself proposed a refund as part of resolving the issue, and the refund-keyword rule fired on that generated text — so it escalated correctly, but for a coincidental reason, not a deliberate security-escalation rule. Confirmed by rerunning the ticket locally: `draft` contains "I can process a full refund immediately" → `"refund" in draft.lower()` → `True`.
+  **Design smell this surfaces:** gating escalation on a keyword match against LLM-generated free text is brittle — it happened to work here, but a differently-phrased draft (or a model swap) could just as easily not mention "refund" and silently skip escalation on a security-sensitive ticket. A cleaner design would classify escalation as its own explicit signal, not an accidental byproduct of draft wording. Worth calling out on the walkthrough as a "what I learned" moment.
+  **Other observation:** retry_count was 0 across all 13 examples — the critique loop, though verified working in isolation (Phase 1), never fired on this dataset because the draft prompt already conditions tightly on the specialist notes. Says more about this dataset being too "easy" for the agent than about the loop being pointless — a meaningfully adversarial eval set would need cases designed to provoke a bad first draft.
+  **Minor:** one row (the affiliate-program question) had a latency spike to 10.75s vs. ~3s typical — not investigated further, likely just API jitter, but worth a mention as a "things I'd keep an eye on" item.
 
 ## Phase 5 — Run Evaluation (UI)
-_(pending)_
+
+Note going in: cleanly UI-evaluating a whole custom multi-node LangGraph app isn't really a supported flow — the Playground is built around a single prompt+model, not an arbitrary graph. LangSmith's own "+ Experiment" menu on the dataset page confirms this split, offering exactly three UI-adjacent options: **Run in Playground** (single prompt), **Run in LangSmith Studio** (for a deployed LangGraph app — more infra than this exercise needs), and **Run in SDK**. Went with Playground, running a single-prompt version of the `classify_ticket` step (the most naturally single-prompt piece of the pipeline) rather than pretending the whole graph fits.
+
+- [x] From the dataset page, **+ Experiment → Run in Playground**.
+  UI path: https://smith.langchain.com → **Datasets & Experiments** → `support-ticket-triage-eval` → **+ Experiment** → **Run in Playground**
+- [x] Configured the Playground run to mirror `classify_ticket`:
+  - System prompt: "Classify this support ticket into exactly one category: billing, technical, or general. Reply with only the single category word, nothing else."
+  - Human message: `{ticket_text}` (auto-mapped to the dataset's input column)
+  - Model: switched Provider from the OpenAI default to **Anthropic**, model `claude-haiku-4-5-20251001` (typed in manually — not in the visible preset list, but accepted)
+- [x] Added an evaluator via **+ Evaluator → Correctness** (prebuilt LLM-as-judge, "whether an answer semantically matches reference").
+  - Had to reconfigure its judge model too: it defaulted to a different provider (OpenAI) than the main prompt, which would have needed a separate `OPENAI_API_KEY`. Switched it to Anthropic (`claude-sonnet-5`) instead — see Friction Log entry #3, this requires entering the Anthropic key into LangSmith's own **Secrets & API keys** store (separate from local `.env`). **Ronnie entered his key directly into that LangSmith UI field** — Claude does not enter API keys into forms under any circumstances, so this one step was handed off.
+- [x] Clicked **Start**. Ran all 13 examples through Claude Haiku with live per-row outputs and correctness scores.
+- [x] **Found a real evaluator bug** (Friction Log entry #2): the Correctness evaluator's scores didn't track actual correctness — e.g. 4 exact category matches (technical==technical, billing==billing) scored 0.00 while 2 matches of the same kind scored 1.00. Opened the trace for one 0.00 row and found the judge's own reasoning concluded *"the output can be considered correct"*, immediately followed by unparsed leaked text: `</comment> <parameter name="correctness">true`. The judge said correct; the system recorded incorrect. Looks like a structured-output parsing bug specific to non-OpenAI judge models.
+  UI path to reproduce: open the experiment → click any row → **Feedback** tab → click the `correctness` comment to expand full reasoning.
+- [x] Logged both new findings in `FRICTION-LOG.md` (entries #2 and #3).
 
 ## Phase 6 — Debug & Iterate
 _(pending)_
