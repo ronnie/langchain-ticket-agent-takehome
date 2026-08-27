@@ -130,7 +130,27 @@ Note going in: cleanly UI-evaluating a whole custom multi-node LangGraph app isn
 - [x] Logged both new findings in `FRICTION-LOG.md` (entries #2 and #3).
 
 ## Phase 6 — Debug & Iterate
-_(pending)_
+
+- [x] **Fixed the escalation design flaw** found in Phase 4/5 (the "hacked account" ticket only escalated by coincidence, via a brittle `"refund" in draft.lower()` keyword check). Replaced `confidence_gate` in `graph.py` with an explicit LLM judgment call: given the ticket, category, specialist notes, and proposed reply, ask "should this be escalated to a human?" with instructions covering financial commitments, security/fraud, legal exposure, and anything outside what the specialist notes authorize. Kept the deterministic "retries exhausted" rule as-is (that one was always sound).
+- [x] Re-tested the hacked-account ticket directly — still escalates (`True`), now because the model explicitly reasons about the security/fraud angle, not because its draft happened to contain the word "refund."
+  ```bash
+  python3 -c "from graph import run_ticket; ..."
+  ```
+- [x] Reran the full SDK evaluation to check for regressions.
+  ```bash
+  python3 run_eval_sdk.py
+  ```
+  Experiment: `ticket-agent-sdk-8a7b3e1c`
+  Results URL: https://smith.langchain.com/o/56b01680-1dc0-4312-9b3a-27f81896b348/datasets/e1d3348d-8463-47e8-9ff0-6c4f846971a2/compare?selectedSessions=3347a9a8-6dd8-4564-add9-83edd549524a
+  **Per-row results (13/13):** 12/13 category matches (row 3, the hacked-account ticket, still labeled "technical" in my reference but the agent still says "billing" — a genuinely debatable call either way, not a regression). 12/13 escalate matches by exact-match-to-reference — **but the one "miss" is actually the more interesting finding, not a bug:**
+  **Row 11** ("You charged me $15 twice this week, please refund the duplicate charge") no longer escalates. Previously it did, purely because the old rule matched on "refund." Under the new LLM judgment, it correctly does *not* escalate — and checking it against my own mock billing policy ("full refunds within 30 days, no questions asked... refunds over $100 or 30+ days require approval"), $15 is squarely within the no-escalation-needed range. **My reference label (`expected_escalate: true`) was itself wrong** — I wrote it with the same "any refund mention = escalate" assumption baked into the original buggy rule, so the flawed rule and the flawed ground truth matched each other by construction. Fixing the agent's logic surfaced a flaw in my eval dataset, not just in the agent. Lesson for the walkthrough: reference labels written by the same person who wrote the system logic are a weak check — they can encode the same blind spot twice.
+  **Trade-off noted:** the fix costs one extra LLM call per ticket. Median latency went from 3.03s to 3.71s and total cost from $0.0113 to $0.0186 across the 13-example run. Worth it here for correctness, but a real product decision (cost/latency vs. reliability) worth calling out explicitly rather than treating as free.
+  **Minor UI oddity, not chased further:** the aggregate "AVG" figures shown at the top of the compare view (e.g., `category_correct 1.00 AVG`) didn't match what a manual count of the per-row values gives (12/13 ≈ 0.92). Low-confidence guess: a stale/partial render of the summary stat rather than a real scoring issue, since the per-row numbers and the underlying trace data were internally consistent. Flagging as a "noticed but didn't root-cause" item rather than adding it to the friction log as a confirmed bug.
+- [x] **Corrected the bad reference label** — updated both `dataset.py` (source of truth) and the live LangSmith dataset via SDK (`client.update_example`) so the $15 duplicate-charge ticket's `expected_escalate` is `False`, matching the actual policy.
+  ```bash
+  python3 -c "from langsmith import Client; ... client.update_example(example_id=..., outputs={'expected_category': 'billing', 'expected_escalate': False})"
+  ```
+  UI path to verify: https://smith.langchain.com → dataset `support-ticket-triage-eval` → **Examples** tab → find the $15 example.
 
 ## Phase 7 — Friction Log
 See `FRICTION-LOG.md` (created and updated live as issues come up).

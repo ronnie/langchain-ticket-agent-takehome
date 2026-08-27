@@ -140,11 +140,24 @@ def confidence_gate(state: TicketState) -> dict:
     ran_out_of_retries = (
         not state["critique_passed"] and state.get("retry_count", 0) >= MAX_RETRIES
     )
-    is_sensitive_billing = (
-        state["category"] == "billing" and "refund" in state["draft"].lower()
+    if ran_out_of_retries:
+        return {"escalate": True}
+
+    prompt = (
+        "Should this support ticket be escalated to a human before the reply "
+        "below is sent? Escalate for: financial commitments (refunds, credits, "
+        "chargebacks), security or fraud concerns (unauthorized access, "
+        "compromised accounts), legal exposure, or anything the specialist "
+        "notes don't clearly authorize the agent to resolve on its own. "
+        "Don't escalate routine informational replies.\n"
+        "Reply with only YES or NO.\n\n"
+        f"Ticket: {state['ticket_text']}\n"
+        f"Category: {state['category']}\n"
+        f"Specialist notes: {state['specialist_notes']}\n"
+        f"Proposed reply: {state['draft']}"
     )
-    escalate = ran_out_of_retries or is_sensitive_billing
-    return {"escalate": escalate}
+    reply = llm.invoke(prompt).content.strip().upper()
+    return {"escalate": reply.startswith("YES")}
 
 
 def route_after_gate(state: TicketState) -> str:

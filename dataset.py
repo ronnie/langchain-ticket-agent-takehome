@@ -30,7 +30,14 @@ EXAMPLES = [
     {
         "ticket_text": "You charged me $15 twice this week, please refund the duplicate charge.",
         "expected_category": "billing",
-        "expected_escalate": True,
+        "expected_escalate": False,
+        "note": (
+            "Corrected after Phase 6: originally labeled True under the "
+            "assumption that any refund mention needs escalation. Per the "
+            "mock billing policy, refunds under $100 within 30 days don't "
+            "need manager approval, so this shouldn't escalate. The original "
+            "label baked in the same flaw as the original escalation rule."
+        ),
     },
     {
         "ticket_text": "When does my subscription renew and how much will it cost?",
