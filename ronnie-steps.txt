@@ -1,0 +1,59 @@
+# LangChain Take-Home — Running Checklist
+
+Live log of every setup/build/eval step, kept for the walkthrough call.
+Each item: what we did, the exact command or UI path (with URL), and notes on what happened.
+
+## Phase 0 — Environment Setup
+
+- [x] Checked available Python — system Python 3.9.6 (`/usr/bin/python3`), no Homebrew/pyenv Python installed. Confirmed 3.9 is sufficient for LangGraph (no upgrade needed).
+  ```bash
+  python3 --version
+  ```
+- [x] Created project directory and virtual environment.
+  ```bash
+  mkdir -p ~/langchain-takehome && cd ~/langchain-takehome
+  python3 -m venv venv
+  ```
+- [x] Installed LangGraph, LangSmith, LangChain, and the Anthropic integration.
+  ```bash
+  source venv/bin/activate
+  pip install --upgrade pip
+  pip install langgraph langsmith langchain langchain-anthropic python-dotenv
+  ```
+  Versions installed: `langgraph==0.6.11`, `langsmith==0.4.37`, `langchain==0.3.30`, `langchain-anthropic==0.3.22`.
+- [x] Pinned dependencies to `requirements.txt`.
+  ```bash
+  pip freeze | grep -iE "^(langgraph|langsmith|langchain|anthropic|python-dotenv)" > requirements.txt
+  ```
+- [x] Created `.env.example` (template for API keys) and `.gitignore` (excludes `venv/`, `.env`).
+- [ ] **Your action:** copy the template and fill in your real keys (never shared with Claude/committed to git):
+  ```bash
+  cd ~/langchain-takehome
+  cp .env.example .env
+  open -e .env   # or your editor of choice
+  ```
+  Fill in:
+  - `ANTHROPIC_API_KEY` — from https://console.anthropic.com/settings/keys
+  - `LANGSMITH_API_KEY` — from https://smith.langchain.com/settings (API Keys tab)
+- [ ] Smoke test: confirm both keys work and a trace lands in LangSmith.
+
+## Phase 1 — Build the LangGraph Agent
+_(pending)_
+
+## Phase 2 — Build the Dataset
+_(pending)_
+
+## Phase 3 — Evaluators
+_(pending)_
+
+## Phase 4 — Run Evaluation (SDK)
+_(pending)_
+
+## Phase 5 — Run Evaluation (UI)
+_(pending)_
+
+## Phase 6 — Debug & Iterate
+_(pending)_
+
+## Phase 7 — Friction Log
+_(pending)_
