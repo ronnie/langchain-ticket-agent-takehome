@@ -33,7 +33,7 @@ confidence_gate  (LLM judgment: does this need a human before sending?)
   with specific feedback, up to 2 retries.
 - **`confidence_gate`** — decides escalation via an explicit LLM judgment (financial
   commitments, security/fraud, legal exposure, or anything the specialist notes don't
-  clearly authorize), not a keyword heuristic — see `ronnie-steps.txt` Phase 6 for why that
+  clearly authorize), not a keyword heuristic — see `RONNIE-STEPS.md` Phase 6 for why that
   distinction matters.
 
 ## Files
@@ -46,7 +46,7 @@ confidence_gate  (LLM judgment: does this need a human before sending?)
 | `evaluators.py` | Custom evaluators: category correctness, escalation correctness, LLM-judge response quality, retry-count metric |
 | `run_eval_sdk.py` | Runs the SDK-side LangSmith evaluation experiment |
 | `smoke_test.py` | One-off script to confirm API keys + LangSmith tracing work |
-| `ronnie-steps.txt` | **Full running log** of every setup/build/eval step, with exact commands and UI paths — the source of truth for the walkthrough |
+| `RONNIE-STEPS.md` | **Full running log** of every setup/build/eval step, with exact commands and UI paths — the source of truth for the walkthrough |
 | `FRICTION-LOG.md` | Three concrete LangGraph/LangSmith friction points found while building this, with repro steps and suggested fixes |
 
 ## Setup
@@ -68,7 +68,7 @@ python3 run_eval_sdk.py        # run the SDK-side evaluation experiment
 ```
 
 The UI-side evaluation (Playground run + prebuilt "Correctness" evaluator) was run directly
-in the LangSmith UI — see `ronnie-steps.txt` Phase 5 for the exact steps to reproduce it.
+in the LangSmith UI — see `RONNIE-STEPS.md` Phase 5 for the exact steps to reproduce it.
 
 ## Eval results (latest run)
 
@@ -80,5 +80,5 @@ LLM-judged response quality:
 - Escalation correct: 12/13 against corrected reference labels
 - Response quality: 4.75/5 average (LLM-as-judge)
 - Full detail, including a bug found in LangSmith's prebuilt evaluator and a fix applied to
-  the agent's own escalation logic mid-project, in `ronnie-steps.txt` (Phases 4–6) and
+  the agent's own escalation logic mid-project, in `RONNIE-STEPS.md` (Phases 4–6) and
   `FRICTION-LOG.md`.
