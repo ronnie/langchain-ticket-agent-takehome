@@ -152,6 +152,15 @@ Note going in: cleanly UI-evaluating a whole custom multi-node LangGraph app isn
   ```
   UI path to verify: https://smith.langchain.com → dataset `support-ticket-triage-eval` → **Examples** tab → find the $15 example.
 
+## Wrap-up
+
+- [x] Wrote `README.md` — project overview, architecture diagram, file guide, setup/run instructions, latest eval summary.
+- [x] Created a private GitHub repo and pushed everything.
+  ```bash
+  gh repo create langchain-ticket-agent-takehome --private --source=. --remote=origin --push
+  ```
+  Repo: https://github.com/ronnie/langchain-ticket-agent-takehome (private — flip to public with `gh repo edit langchain-ticket-agent-takehome --visibility public`, or add the interviewer as a collaborator, whichever's preferred before sharing the link)
+
 ## Phase 7 — Friction Log
 See `FRICTION-LOG.md` (created and updated live as issues come up).
 - [x] Entry #1 logged: funded LLM provider API access is a silent prerequisite — a Claude Pro subscription doesn't cover API billing, and neither the take-home prompt nor the linked docs flag this. Caused the first agent call to fail with an unclear-to-newcomers 400 error.
